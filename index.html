@@ -253,6 +253,7 @@ em{font-style:normal}
 .m-close b{color:var(--gold2);font-weight:600;display:block;margin-bottom:2px;font-size:10.5px}
 
 .follow{padding:11px 15px 13px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px}
+.follow[hidden]{display:none}
 .follow .fl{width:100%;font-size:7.5px;letter-spacing:.18em;color:var(--ink3);margin-bottom:3px;text-transform:uppercase}
 .follow button{
   font:inherit;font-size:10px;color:#D5CFC4;background:rgba(255,255,255,.04);border:1px solid var(--line2);
@@ -562,7 +563,7 @@ em{font-style:normal}
     <button class="mclose" data-close aria-label="닫기">✕</button>
     <div class="grab"></div>
     <div class="tagl">MEMORY</div>
-    <h2 id="memDrawerTitle">제가 기억하는 취향 <span id="drawerCount">8</span></h2>
+    <h2 id="memDrawerTitle">제가 기억하는 취향 <span id="drawerCount">8</span>개</h2>
     <p class="lead">대화에서 배운 것을 여기에 쌓습니다. 지우고 싶은 항목은 × 로 지우면 다시 쓰지 않습니다.</p>
     <div id="memList"></div>
     <div class="mdrawer-foot">
@@ -690,8 +691,11 @@ em{font-style:normal}
     });
   }
   function addMemory(text, group){
-    for(var i=0;i<MEM.length;i++){ if(MEM[i].t === text) return false; }
-    MEM.unshift({g:group||'기타', t:text, neu:true});
+    var g = group || '기타';
+    var t = String(text);
+    if(t.indexOf(g + ' · ') === 0) t = t.slice(g.length + 3);
+    for(var i=0;i<MEM.length;i++){ if(MEM[i].t === t) return false; }
+    MEM.unshift({g:g, t:t, neu:true});
     saveMem(); memCountSync(); renderMemStrip(); renderMemList();
     var btn = $('.mem-btn');
     if(btn){ btn.classList.add('flash'); setTimeout(function(){ btn.classList.remove('flash'); }, 1500); }
@@ -969,7 +973,7 @@ em{font-style:normal}
     thread.insertBefore(el, thread.firstChild);
     thread.classList.add('on');
     var cards = $$('.m-card', thread);
-    if(cards.length > 3) cards[cards.length-1].remove();
+    if(cards.length > 2) cards[cards.length-1].remove();
 
     var rt = {
       m: m, el: el,
@@ -981,7 +985,12 @@ em{font-style:normal}
         d.className = 'blk';
         d.setAttribute('data-b', i);
         d.innerHTML = blockHTML(m.blocks[i], i);
-        rt.blocksEl().appendChild(d);
+        var host = rt.blocksEl();
+        var kids = host.querySelectorAll('[data-b]'), after = null;
+        for(var k=0;k<kids.length;k++){
+          if(parseInt(kids[k].getAttribute('data-b'),10) > i){ after = kids[k]; break; }
+        }
+        if(after) host.insertBefore(d, after); else host.appendChild(d);
         return d;
       },
       refresh: function(i){
@@ -1101,7 +1110,13 @@ em{font-style:normal}
       var txt = p ? p.textContent : '';
       if(!txt) return;
       var ok = function(){ toast('초안을 복사했습니다'); };
-      var fail = function(){ toast('길게 눌러 직접 복사해 주세요'); };
+      var fail = function(){
+        try{
+          var r = document.createRange(); r.selectNodeContents(p);
+          var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        }catch(err){}
+        toast('초안을 선택했습니다 — 길게 눌러 복사');
+      };
       if(navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(txt).then(ok).catch(fail);
       } else {
@@ -1278,15 +1293,25 @@ em{font-style:normal}
           if(c.m.s.quiet) return c.toast('이미 가장 조용한 곳으로 잡았습니다');
           c.m.s.quiet = true;
           c.busy('소음·테이블 간격 재확인', 700, function(){
-            c.set(0, {title:'스시 하루 · 별실 2인 전용 · '+when,
-              cands:[
-                {name:'스시 하루', meta:where+' · 2인 전용 별실 · 방음 · '+when, side:'1인 18만원', pick:true},
-                {name:'료 미도', meta:where+' · 2~6인 룸 · 20:30', side:'1인 15만원'},
-                {name:'소우', meta:'논현 · 4인 테이블룸 · 소음 있음', side:'1인 9만원'}
-              ],
-              note:'테이블 간격이 가장 넓은 2인 전용 별실로 바꿨습니다. 4인은 좌석을 붙여 세팅한다고 확인했습니다.'});
+            if(c.m.s.budget){
+              c.set(0, {title:'료 미도 · 2~6인 룸 · '+when.replace('20:00','20:30'),
+                cands:[
+                  {name:'료 미도', meta:where+' · 안쪽 룸 · 20:30 · 방음', side:'1인 15만원', pick:true},
+                  {name:'스시 하루', meta:where+' · 별실 4인 · 20:00', side:'1인 18만원'},
+                  {name:'소우', meta:'논현 · 4인 테이블룸 · 소음 있음', side:'1인 9만원'}
+                ],
+                note:'예산은 그대로 두고, 룸 안쪽자리로 바꿨습니다. 테이블 간격이 넓고 방음이 됩니다.'});
+            } else {
+              c.set(0, {title:'스시 하루 · 별실 2인 전용 · '+when,
+                cands:[
+                  {name:'스시 하루', meta:where+' · 2인 전용 별실 · 방음 · '+when, side:'1인 18만원', pick:true},
+                  {name:'료 미도', meta:where+' · 2~6인 룸 · 20:30', side:'1인 15만원'},
+                  {name:'소우', meta:'논현 · 4인 테이블룸 · 소음 있음', side:'1인 9만원'}
+                ],
+                note:'테이블 간격이 가장 넓은 2인 전용 별실로 바꿨습니다. 4인은 좌석을 붙여 세팅한다고 확인했습니다.'});
+            }
             c.mem('좌석 · 소음보다 격리 우선','좌석');
-            c.toast('가장 조용한 별실로 바꿨습니다');
+            c.toast('가장 조용한 자리로 바꿨습니다');
           });
         }},
         {t:'차량 10분 늦춰', run:function(c){
